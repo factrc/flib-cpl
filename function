@@ -554,8 +554,15 @@ lib.ad.AstraVersionMatchBetter() {
 lib.ad.MakeSssdConfig() {
 	local sssd="$1"
 	local DOMAIN=$(echo ${domain} | tr [:lower:] [:upper:])
+	local ad_server=""
 
 	[ -z "$sssd" ] && return 1
+
+	[ -z "$master_dc" ] && lib.ad.GetFromDnsRecords
+
+	if [ -n "$master_dc" ]; then
+		ad_server+="_srv_,$master_dc"
+	fi
 
 	local tmpfile=$(mktemp -q)
 	[ $? -ne 0 ] && return 1
@@ -576,6 +583,7 @@ lib.ad.MakeSssdConfig() {
     subdomains_provider = ad
 
     ad_hostname = ${machine_name:-$(cat /etc/hostname)}
+	ad_server = $ad_server
     ad_domain = ${DOMAIN}
     ad_gpo_access_control = disabled
     krb5_realm = ${DOMAIN}
@@ -692,6 +700,10 @@ lib.ad.MakeKrb5Config() {
 	local WORKGROUP=$(echo ${domain//./} | tr [:lower:] [:upper:])
 
 	[ -z "$krb5" ] && return 1
+
+	[ -z "$master_dc" ] && lib.ad.GetFromDnsRecords
+
+	[ -z "$master_dc" ] && return 1
 
 	local tmpfile=$(mktemp -q)
 	[ $? -ne 0 ] && return 1
