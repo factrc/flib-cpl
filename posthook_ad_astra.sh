@@ -1,0 +1,35 @@
+which mkhomedir_helper
+if [ $? -eq 0 ]; then
+	[ -r /usr/share/pam-configs/mkhomedir ] || cat <<EOF >/usr/share/pam-configs/mkhomedir
+Name: mkhomedir
+Default: yes
+Priority: 900
+Session-Type: Additional
+Session: optional  pam_mkhomedir.so umask=0077 skel=/etc/skel
+EOF
+fi 
+#######
+# сказ о "Fly-dm и входа в систему" с поддержкой домена. "Удивительный ход" в реализации
+#######
+if [ -r /etc/astra_update_version ]; then
+    mkdir -p /etc/domains.list.d
+    if [ -r /usr/bin/astra-ad-sssd-domains-ctl ] && [ ! -e /etc/domains.list.d/astra-ad-sssd-domains-ctl ]; then
+        echo 'Включаем в окне логина, выбор домена: '
+        ln -s /usr/bin/astra-ad-sssd-domains-ctl /etc/domains.list.d/astra-ad-sssd-domains-ctl
+    fi
+fi
+
+VARIANT_ID="$(cat /etc/os-release | sed -n 's/VARIANT_ID=\(.\+\)/\1/p')"
+
+if [ "$VARIANT_ID" = "smolensk" ] && [ ! -r /usr/bin/astra-ad-sssd-domains-ctl ]; then 
+    echo 'Включаем в окне логина, выбор домена. Для старых версий Астра'
+    sed -i -e '/^#\?PluginsLogin=.\+/{s/^#\?PluginsLogin=.\+/PluginsLogin=ipa/I}' /etc/X11/fly-dm/fly-dmrc
+fi
+# last user logon view. small tunes
+echo 'Включаем при окне логина отображения, последнего входящего пользователя.'
+sed -i -e '/^#\?PreselectUser=.\+/{;s/^#\?PreselectUser=.\+/PreselectUser=Previous/I}' /etc/X11/fly-dm/fly-dmrc
+#######
+#  Set  the  Hardware  Clock from the System Clock
+#  Sometime is wrong after installing system(Aquarius). Numa bios?. Force it
+#######
+hwclock -w

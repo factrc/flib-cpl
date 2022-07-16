@@ -1,0 +1,90 @@
+#############################
+# DON'T MODIFY if you don't understand
+#######################
+# Use only sssd, don't look other database
+FLIB_MISC_SEARCH_SERVICE="-s sss"
+
+# in the user's home directory, the $FLIB_MOUNT_DISK directory is created and links the mounted resources here
+# if value is empty, no create script $FLIB_MISC_PROFILE_SCRIPT
+FLIB_MISC_PROFILE_SCRIPT='/etc/profile.d/network-disk.sh'
+FLIB_MOUNT_DISK='Сетевые_диски'
+
+#PAMMOUNT
+#Задаем путь где будут содержаться монтированные ресурсы пользователей, рекоменд /mnt  FHS 3.0, Надо не забыть поправить SELinux 
+# Если параметр пуст, то отрабатывается только ~ как домашний каталог пользователя(группы и @ недоступны), либо абсолютный путь
+FLIB_PAMMOUNT_DIR=/mnt/USERS
+
+FLIB_PAMMOUNT_GCONFIG=/etc/security/pam_mount.conf.xml
+FLIB_PAMMOUNT_UCONFIG=.pam_mount.conf.xml
+FLIB_PAMMOUNT_OPT="nosuid,nodev,dir_mode=0600,file_mode=0600,rw,noperm,soft,setuids,vers=1.0,cruid=%(USERUID),sec=krb5"
+# don't create pam_mount resource if id < FLIB_PAMMOUNT_MINUID
+FLIB_PAMMOUNT_MINUID=1000
+
+#Задаем где будут храниться глобальные ресурсы, рекоменд /mnt  FHS 3.0. Надо не забыть поправить SELinux
+#AUTOFS
+# Options for AUTOFS - always append -fstype=cifs,nosuid,nodev,{you options}
+FLIB_AUTOFS_DIR=/mnt/GLOBAL
+#AD
+# фильтр для поиска группы содержащей компьютеры. 
+# Тут все сложнее так как ldap не осуществляет поиск по dn, если полагаться только на "(&(objectClass=organizationalUnit)(ou=*)), то будут не все подразделения
+# в связи с отсутствием LDAPv3 subordinate feature extension 
+# Поэтому читаем ВСЕ ГРУППЫ и фильтруем уже на выходе.
+FLIB_AD_OUFILTER='OU=Компьютеры'
+# Default options
+FLIB_AD_SMB_CONFIG=/etc/samba/smb.conf
+FLIB_AD_SSSD_CONFIG=/etc/sssd/sssd.conf
+FLIB_AD_KRB5_CONFIG=/etc/krb5.conf
+
+# From file /etc/os-release
+# If ID_LIKE more than 1 value like "rhel fedora" get only first param "rhel"
+# After detected os type, using only values with ID_LIKE or ID suffix
+#   priority 1: ID 
+#   priority 2: ID_LIKE
+# Example:
+#   flib_misc_cmd_exist_debian="value1"
+#   flib_misc_cmd_exist_ubuntu="value2"
+#   Take only flib_misc_cmd_exist_ubuntu 
+#   if flib_misc_cmd_exist_ubuntu not defined or empty, flib_misc_cmd_exist_debian will be taken.
+#
+# If ( *hook* or *script* ) and defined values with ID and ID_LIKE, execute both script with priority 
+# Example:
+#   flib_ad_post_hook_debian='/path/script1'
+#   flib_ad_post_hook_ubuntu='/path/script2'
+#   executing  /path/script2 and next /path/script1
+#
+# DEBIAN LIKE
+flib_misc_cmd_exist_debian="dpkg -s"
+flib_misc_cmd_install_debian="apt install -y"
+flib_ad_packages_debian=(sssd sssd-ad sssd-krb5 sssd-ldap sssd-dbus samba samba-common winbind libpam-sss krb5-user krb5-config ldap-utils dnsutils)
+flib_pammount_packages_debian=(libpam-mount cifs-utils)
+flib_autofs_packages_debian=(autofs5)
+flib_ad_post_hook_debian="posthook_ad_debian.sh"
+# RHEL LIKE
+flib_misc_cmd_exist_rhel="yum list installed"
+flib_misc_cmd_install_rhel="yum install -y"
+flib_ad_packages_rhel=(sssd sssd-ad sssd-krb5 sssd-ldap sssd-dbus samba samba-common samba-winbind sssd-winbind-idmap krb5-workstation openldap-clients)
+flib_pammount_packages_rhel=(pam_mount cifs-utils)
+flib_autofs_packages_rhel=(autofs libsss_autofs)
+flib_ad_post_hook_rhel="posthook_ad_rhel.sh"
+flib_pammount_post_hook_rhel="posthook_pammount_rhel.sh"
+#ASTRA
+flib_ad_post_sssd_script_astra='script_sssd_astra.sh'
+flib_ad_post_hook_astra="posthook_ad_astra.sh"
+
+#if system type not detected
+#flib_misc_cmd_exist_="true"
+#flib_misc_cmd_install_="true"
+#flib_ad_packages_=()
+#flib_pammount_packages_=()
+#flib_autofs_packages_=()
+#flib_ad_pre_hook_=''
+#flib_ad_post_hook_=''
+#flib_pammount_pre_hook_=''
+#flib_pammount_post_hook_=''
+#flib_autofs_pre_hook_=''
+#flib_autofs_post_hook_=''
+#
+# $1 argument maked file, you can change 
+#flib_ad_post_smb_script_=''
+#flib_ad_post_krb5_script_=''
+#flib_ad_post_sssd_script_=''

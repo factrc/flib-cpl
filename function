@@ -1,0 +1,1301 @@
+# Copyright (C) Sergey Loskutov
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+#MISC
+FLIB_MISC_DLG_OPT="--cancel-label Отмена --colors"
+FLIB_MISC_SEARCH_SERVICE="-s sss"
+FLIB_MOUNT_DISK='Сетевые_диски'
+
+_flib_path_='./'
+FLIB_MISC_PROFILE_SCRIPT='/etc/profile.d/network-disk.sh'
+
+flib_misc_cmd_exist_="true"
+flib_misc_cmd_install_="true"
+
+flib_ad_packages_=()
+flib_pammount_packages_=()
+flib_autofs_packages_=()
+
+flib_ad_pre_hook_=''
+flib_ad_post_hook_=''
+flib_pammount_pre_hook_=''
+flib_pammount_post_hook_=''
+flib_autofs_pre_hook_=''
+flib_autofs_post_hook_=''
+
+flib_ad_post_smb_script_=''
+flib_ad_post_krb5_script_=''
+flib_ad_post_sssd_script_=''
+
+#Задаем путь где будут содержаться монтированные ресурсы пользователей, рекоменд /mnt  FHS 3.0
+#PAMMOUNT
+FLIB_PAMMOUNT_DIR=/mnt/USERS
+FLIB_PAMMOUNT_GCONFIG=/etc/security/pam_mount.conf.xml
+FLIB_PAMMOUNT_UCONFIG=.pam_mount.conf.xml
+FLIB_PAMMOUNT_OPT="nosuid,nodev,dir_mode=0600,file_mode=0600,rw,noperm,soft,setuids,vers=1.0,cruid=%(USERUID),sec=krb5"
+FLIB_PAMMOUNT_MINUID=1000
+
+#AUTOFS
+FLIB_AUTOFS_DIR=/mnt/GLOBAL
+FLIB_AUTOFS_CONFIG=netdisk-cifs.autofs
+
+#AD
+FLIB_AD_OUFILTER='OU=Компьютеры'
+FLIB_AD_SMB_CONFIG=/etc/samba/smb.conf
+FLIB_AD_SSSD_CONFIG=/etc/sssd/sssd.conf
+FLIB_AD_KRB5_CONFIG=/etc/krb5.conf
+
+##########################################################################
+#
+#			MISC SECTION
+#
+##########################################################################
+
+# Old bash don't have reference 'declare -n', we degrade, ok and 'function' too
+# my suragate 'declare -n'
+#-help- lib.misc.CopyByName dest src
+lib.misc.CopyByName() {
+	local __d__="$1"
+	local __s__="$2"
+	local __r__="$__d__=(\"\${${__s__}[@]}\")"
+	eval $__r__
+}
+
+#-help- lib.misc.epilogref dest src
+#lib.misc.epilogref() {
+#	local __d__="$1"
+#	local __s__="$2"
+#	local __r__="$__d__=(\"\${${__s__}[@]}\")";
+#	eval $__r__;
+#}
+
+#lib.misc.epilogref() {
+#	local __v__="$1";
+#	shift;
+#	local __a__=("$@")
+#	unset $v;
+#	local __s__="$__v__=(\"\${__a__[@]}\")";
+#	eval $__s__;
+#}
+
+#-help- lib.misc.isNum <value>
+isNum() {
+	[[ "$1" =~ ^-?[0-9]+$ ]] && return 0
+	return 1
+}
+
+#-help- lib.misc.TrapSafe <'trap -p <TRAP_TYPE>'>
+lib.misc.TrapSafe() {
+	echo -n ${@:3:$(($# - 3))}
+}
+
+#-help- lib.misc.DialogWrapper <ref_valuesFromDialog> <ref_statusDialog> <$@>
+lib.misc.DialogWrapper() {
+	#	declare -n _ref1_="$1"
+	#	declare -n _ref2_="$2"
+	local __arg1="$1"
+	local __arg2="$2"
+	lib.misc.CopyByName _ref1_ $__arg1
+	lib.misc.CopyByName _ref2_ $__arg2
+	shift
+	shift
+	local safe_exit_trap=$(lib.misc.TrapSafe $(trap -p EXIT))
+	trap 'exec 3>&-' EXIT
+	exec 3>&1
+	_ref1_=$(dialog $FLIB_MISC_DLG_OPT "$@" 2>&1 1>&3)
+	_ref2_=$?
+	exec 3>&-
+	trap $safe_exit_trap EXIT
+	lib.misc.CopyByName $__arg1 _ref1_
+	lib.misc.CopyByName $__arg2 _ref2_
+	return $_ref2_
+}
+
+#-help- lib.misc.Debug
+lib.misc.Debug() {
+	if [ -n "$DEBUG_LIB" ]; then
+		echo -en "$1 : " 1>&2
+		shift
+		echo -e "$@" 1>&2
+	fi
+}
+
+# return value is ${name_prefix+${${OS_RELEASE_ID_LIKE[0]}}
+#-help- lib.misc.GetValueByName name_prefix
+lib.misc.GetValueByName() {
+
+	if [ -n "$OS_RELEASE_ID" ]; then
+		lib.misc.Debug "lib.misc.GetValueByName" "get by OS_RELEASE_ID: \$${1,,*}_${OS_RELEASE_ID,,*}"
+		local byid=$(eval "echo \$${1,,*}_${OS_RELEASE_ID,,*}")
+		if [ -n "$byid" ]; then
+			if [ -z "$2" ] || [ "$2" = "1" ]; then
+				echo "$byid"
+				return 0
+			fi
+		fi
+	fi
+	local tmp=($OS_RELEASE_ID_LIKE)
+	tmp=${tmp[0]}
+	lib.misc.Debug "lib.misc.GetValueByName" "get by OS_RELEASE_ID_LIKE: \$${1,,*}_${tmp,,*}"
+	if [ -z "$2" ] || [ "$2" = "2" ]; then
+		eval "echo \$${1,,*}_${tmp,,*}"
+	fi
+	return 0
+}
+
+# return value is ${name_prefix+${${OS_RELEASE_ID_LIKE[0]}}
+#-help- lib.misc.GetArrayByName name_prefix
+lib.misc.GetArrayByName() {
+	if [ -n $OS_RELEASE_ID ] && [ -z "$2" ]; then
+		lib.misc.Debug "lib.misc.GetArrayByName" "get by OS_RELEASE_ID: \${${1,,*}_${OS_RELEASE_ID,,*}[@]}"
+		byid=($(eval "echo \"\${${1,,*}_${OS_RELEASE_ID,,*}[@]}\""))
+		if [ ${#byid[@]} -ne 0 ]; then
+			echo "${byid[@]}"
+			unset byid
+			return 0
+		fi
+	fi
+	local tmp=($OS_RELEASE_ID_LIKE)
+	tmp=${tmp[0]}
+	lib.misc.Debug "lib.misc.GetArrayByName" "get: \${${1,,*}_${tmp,,*}[@]}"
+	eval "echo \"\${${1,,*}_${tmp,,*}[@]}\""
+}
+
+#-help- lib.misc.DetectOS
+lib.misc.DetectOS() {
+	if [ -n "$OS_RELEASE_NAME" ] || [ ! -r /etc/os-release ]; then
+		return 0
+	fi
+	local v=$(cat /etc/os-release | sed 's/\s\+=\s\+/=/g;s/^\(\w\+=.\+\)/OS_RELEASE_\1/')
+	eval $v
+	lib.misc.Debug "lib.misc.DetectOS" "like: $OS_RELEASE_ID_LIKE"
+	flib_misc_cmd_exist=$(lib.misc.GetValueByName "flib_misc_cmd_exist")
+	flib_misc_cmd_install=$(lib.misc.GetValueByName "flib_misc_cmd_install")
+
+	flib_misc_cmd_exist=${flib_misc_cmd_exist:-$flib_misc_cmd_exist_}
+	flib_misc_cmd_install=${flib_misc_cmd_install:-$flib_misc_cmd_install_}
+
+	flib_ad_packages=($(lib.misc.GetArrayByName "flib_ad_packages"))
+	flib_pammount_packages=($(lib.misc.GetArrayByName "flib_pammount_packages"))
+	flib_autofs_packages=($(lib.misc.GetArrayByName "flib_autofs_packages"))
+
+	return 0
+}
+
+#-help- lib.misc.ExecScript name_hook [ arg1...argn ]
+lib.misc.ExecScript() {
+	local value_name="$1"
+	shift
+	if [ -z "$value_name" ]; then
+		return 0
+	fi
+	for i in 1 2; do
+		local script="$(lib.misc.GetValueByName "$value_name" "$i")"
+		if [ -n "$script" ]; then
+			if [ "${script:0:1}" != '/' ]; then
+				script="$_flib_path_/$script"
+			fi
+			lib.misc.Debug "lib.misc.ExecScript" "script: $script"
+			if [ -f "$script" ]; then
+				lib.misc.Debug "lib.misc.ExecScript" "script \"$script\" with args \"$@\" start."
+				/bin/bash "$script" $@
+				lib.misc.Debug "lib.misc.ExecScript" "script \"$script\" exit."
+			fi
+		fi
+	done
+}
+
+# not safe
+#-help- lib.misc.GetUserField <username> <field>
+lib.misc.GetUserField() {
+	local field=$(getent $FLIB_MISC_SEARCH_SERVICE passwd "$1" | sed -n "s|^\([[:alnum:]]*\):\([^:]*\):\([^:]*\):\([^:]*\):\([^:]*\):\([^:]*\):\(.*\)$|\\$2|p")
+	echo $field
+}
+
+# not safe
+#-help- lib.misc.GetGroupField <group> <field>
+lib.misc.GetGroupField() {
+	local field=$(getent $FLIB_MISC_SEARCH_SERVICE group "$1" | sed -n "s|^\([^:]*\):\([^:]*\):\([^:]*\):\(.*\)$|\\$2|p")
+	echo $field
+}
+
+#-help- lib.misc.GetUserHomeDir <username>
+lib.misc.GetUserHomeDir() {
+	[ -z "$1" ] && return 1
+	lib.misc.GetUserField "$1" 6
+	return 0
+}
+
+#-help- lib.misc.GetUserUID <username>
+lib.misc.GetUserUid() {
+	[ -z "$1" ] && return 1
+	lib.misc.GetUserField "$1" 3
+	return 0
+}
+
+#-help- lib.misc.GetUserGID <username>
+lib.misc.GetUserGid() {
+	[ -z "$1" ] && return 1
+	lib.misc.GetUserField "$1" 4
+	return 0
+}
+#-help- lib.misc.GetUserComment <username>
+lib.misc.GetUserComment() {
+	[ -z "$1" ] && return 1
+	lib.misc.GetUserField "$1" 5
+	return 0
+}
+
+#-help- lib.misc.GetGroupUID <group>
+lib.misc.GetGroupUid() {
+	[ -z "$1" ] && return 1
+	lib.misc.GetGroupField "$1" 3
+	return 0
+}
+#-help- lib.misc.GetGroupUsers <group>
+lib.misc.GetGroupUsers() {
+	[ -z "$1" ] && return 1
+	lib.misc.GetGroupField "$1" 4
+	return 0
+}
+
+#-help- lib.misc.UniqArray ref_array
+lib.misc.UniqArray() {
+	#	declare -n _ref_="$1"
+	#	shift
+	local _return_name_=$1
+	lib.misc.CopyByName _ref_ $_return_name_
+	local _arr_=()
+	for i in ${!_ref_[@]}; do
+		local bfind=0
+		for j in ${!_arr_[@]}; do
+			if [ "${_ref_[$i]}" = "${_arr_[$j]}" ]; then
+				bfind=1
+				break
+			fi
+		done
+		if [ $bfind -eq 0 ]; then
+			_arr_+=("${_ref_[$i]}")
+		fi
+	done
+	lib.misc.CopyByName $_return_name_ _arr_
+	#	_ref_=("${_arr_[@]}")
+	return 0
+}
+
+# Установка имени компьютера
+#-help- lib.misc.SetHostname <newname>
+lib.misc.SetHostname() {
+	local tmpname=$(cat /etc/hostname)
+	local name="$1"
+	if [ -z $name ]; then
+		return 1
+	fi
+	if [ "$name" != "$tmpname" ]; then
+		local host=${name%%.*}
+		lib.misc.Debug "lib.misc.SetHostname" "oldhost = $tmpname , host = $host , newhost = $name"
+		#	hostnamectl required dbus.... if installer dbus failed not check failed
+		hostnamectl set-hostname $name
+		hostname "$name" || return 1
+		grep -q "^127.0.1.1" /etc/hosts || echo -e "127.0.1.1\t$name\t$host" >>/etc/hosts
+		sed -i -e "s/^127.0.1.1.*\$/127.0.1.1 $name $host/g" /etc/hosts
+	fi
+	return 0
+}
+
+# Проверяем установлен ли пакет
+#-help- lib.misc.IsExistPackage <package>
+lib.misc.IsExistPackage() {
+	if [ -z "$1" ]; then
+		return 1
+	fi
+	$flib_misc_cmd_exist "$1" 1>/dev/null 2>&1 && return 0
+	return 1
+}
+
+##################
+# Проверяем пакеты на наличие в системе, возвращает в переменной RET массив с непрошедшими проверку.
+# 0 - ok
+# 1 - если список не прошедших проверку не пуст.
+# RESULT:  RET - array with not existing package
+##################
+#-help- lib.misc.IsExistPackageBatchMode <package1> <package2> .....
+lib.misc.IsExistPackageBatchMode() {
+	RET=()
+	while [ -n "$1" ]; do
+		lib.misc.IsExistPackage $1 || RET+=($1)
+		shift
+	done
+	[ ${#RET[@]} -ne 0 ] && return 1
+	return 0
+}
+
+####################
+# Устанавливает пакеты из списка переданных в качестве аргумента
+# возвращает в переменной RET массив с неустановленными пакетами. RET1 - массив с кодами ошибок установки
+# RESULT:  RET - array with not installed package and RET1 error code
+####################
+#-help- lib.misc.InstallPackages  <package1> <package2> .....
+lib.misc.InstallPackages() {
+	RET=()
+	RET1=()
+	local gstatus=0
+	while [ -n "$1" ]; do
+		local status=0
+		lib.misc.IsExistPackage "$1" || status=$?
+		lib.misc.Debug "lib.misc.InstallPackages" "package $1: $status"
+		if [ $status -ne 0 ]; then
+			status=0
+			[ -z $DEBUG_LIB ] || echo "Требуется пакет: \"$1\", устанавливаем..."
+			lib.misc.Debug "lib.misc.InstallPackages" "call cmd: $flib_misc_cmd_install \"$1\" "
+			$flib_misc_cmd_install "$1" || status=$?
+			lib.misc.Debug "lib.misc.InstallPackages" "type=$OS_RELEASE_ID_LIKE, status=$status"
+			if [ $status -ne 0 ]; then
+				gstatus=1
+				RET+=($1)
+				RET1+=($status)
+			fi
+		fi
+		shift
+	done
+	return $gstatus
+}
+
+#-help- lib.misc.MakeScriptForNetworkDisks
+lib.misc.MakeScriptForNetworkDisks() {
+
+	[ -r "$FLIB_MISC_PROFILE_SCRIPT" ] && return 0
+	local status=0
+	cat <<EOF >"$FLIB_MISC_PROFILE_SCRIPT"
+    _make_network_disks_()
+    {
+      [ "\$(id -u)" -lt $FLIB_PAMMOUNT_MINUID ]	&& return 0
+      local NET_DISKS="$FLIB_MOUNT_DISK"
+      local usr=\$(echo \$USER | tr '[:upper:]' '[:lower:]')
+      [ -d ~/\$NET_DISKS ] || mkdir ~/\$NET_DISKS
+      # remove broken link  
+      for i in \$(ls -d ~/\$NET_DISKS/* 2>/dev/null); do 
+        if [ -L \$i ] && [ ! -r \$i ]; then
+           rm -f \$i; 
+        fi
+      done
+      for i in \$(ls -d $FLIB_AUTOFS_DIR/*/ 2>/dev/null); do
+        local name=\$(basename \$i)
+        [ -r ~/\$NET_DISKS/\$name ] || ln -s \$i ~/\$NET_DISKS/\$name 2>/dev/null
+      done
+      for i in \$(ls -d $FLIB_PAMMOUNT_DIR/\$usr/*/ 2>/dev/null); do
+        local name=\$(basename \$i)
+        [ -r ~/\$NET_DISKS/\$name ] || ln -s \$i ~/\$NET_DISKS/\$name 2>/dev/null
+      done
+    }
+    _make_network_disks_
+    unset -f _make_network_disks_
+EOF
+}
+
+##########################################################################
+#
+#			ACTIVE DIRECTORY SECTION
+#
+##########################################################################
+
+#-help- lib.ad.GetRequiredPackages
+lib.ad.GetRequiredPackages() {
+	echo "${flib_ad_packages[@]}"
+	return 0
+}
+
+###
+# Согласно требованиям по Active Directory
+#	PDC SRV		_ldap._tcp.pdc._msdcs.<DnsDomainName>		One per domain
+#	GC  SRV		_ldap._tcp.gc._msdcs.<DnsForestName>		At least one per forest
+#	KDC SRV		_kerberos._tcp.dc._msdcs.<DnsDomainName>	At least one per domain
+#	DC  SRV		_ldap._tcp.dc._msdcs.<DnsDomainName		At least one per domain
+# заполняем переменные master_dc и domain_dc - все контроллеры ( всегда в массиве domain_dc 0 индекс ссылается на основной контроллер )
+#
+#-help- lib.ad.GetFromDnsRecords
+lib.ad.GetFromDnsRecords() {
+	if [ -z "$domain" ]; then
+		return 1
+	fi
+	master_dc=$(dig _ldap._tcp.pdc._msdcs.$domain srv +short | sed -e 's/.\+\s\+\(.\+\).$/\1/g')
+	domain_dc=($master_dc $(dig _kerberos._tcp.dc._msdcs.$domain srv +short | sed -e "/$master_dc/d;s/.\+\s\+\(.\+\).\$/\1/g" | sort | tr '\n' ' '))
+	lib.misc.Debug "lib.ad.GetFromDnsRecords" "master_dc=${master_dc}"
+	lib.misc.Debug "lib.ad.GetFromDnsRecords" "domain_dc=${domain_dc[@]}"
+	return 0
+}
+
+#################
+#  Читаем подразделения из AD для регистрации компьютера, фильтр "(&(objectClass=organizationalUnit)(ou=*))" && userfilter ( пример: ^OU=Компьютеры )
+#  userfilter по умолчанию 'OU=Компьютеры'
+#  Эта функция читает с ldap напрямую, не используя net ads search, так как для нее нужен сформированный конфиг smb.conf
+#  output:
+#	 список подразделений (формат OU=Компьютеры,OU=Отдел,OU=Организация,DC=Домен3,DC=Домен2,DC=Домен1 )
+#################
+#-help- lib.ad.GetOuFromLdap ref_array <username> <passwd> <filter>
+lib.ad.GetOuFromLdap() {
+	#	declare -n _ref1="$1"
+	local __arg1="$1"
+	lib.misc.CopyByName _ref1 $__arg1
+	shift
+
+	local username="$1"
+	local passwd="$2"
+	local filter="${3:-$FLIB_AD_OUFILTER}"
+	local searchbase=$(echo DC=$domain | sed -e 's/\./,DC=/g;s/.*/\U&/')
+
+	if [ -z "$domain" ] || [ -z "$username" ] || [ -z "$passwd" ]; then
+		return 1
+	fi
+
+	[ "${#domain_dc[@]}" -eq 0 ] && lib.ad.GetFromDnsRecords
+
+	local list=$(for ldap_server in ${domain_dc[@]}; do
+		# check ldap server and skip if fail.
+		lib.misc.Debug "lib.ad.GetOuFromLdap" "read from server: $ldap_server"
+		#		ldapsearch -o ldif-wrap=no -u -H ldap://$ldap_server -x -w $passwd -D "$username@$domain" -b "$searchbase" "(&(objectClass=organizationalUnit)(ou=*))" distinguishedName 2>/dev/null | sed -ne 's/dn:: \(.*\)$/\1Cgo=/p' | base64 -di | grep -i "$filter" | sed ':x; $!N; s/\n/\|/; tx; P;d' && break
+		ldapsearch -o ldif-wrap=no -u -H ldap://$ldap_server -x -w $passwd -D "$username@$domain" -b "$searchbase" "(&(objectClass=organizationalUnit)(ou=*))" dn | sed -ne 's/^dn:: \(.*\)$/\1Cgo=/p' | base64 -di | sed "/$filter/{s/\(.\+\)$/\1\|/g;p};$!d" && break
+	done)
+	IFS="|" read -a _ref1 <<<$(echo $list | tr '|' '\n' | sort | sed -e '/^$/d' | tr '\n' '|')
+	lib.misc.Debug "lib.ad.GetOuFromLdap" "array size = ${#_ref1[@]}"
+	lib.misc.CopyByName $__arg1 _ref1
+	return 0
+}
+
+#  Читаем подразделения из AD для регистрации компьютера, "(&(objectClass=organizationalUnit)(ou=*))"  && userfilter ( пример: ^OU=Компьютеры )
+#  userfilter по умолчанию 'OU=Компьютеры'
+#  Эта функция использует "net ads search"
+#  output:
+#     список подразделений (формат OU=Компьютеры,OU=Отдел,OU=Организация,DC=Домен3,DC=Домен2,DC=Домен1 )
+#################
+#-help- lib.ad.GetOuFromNet ref_array <username> <passwd> <filter>
+lib.ad.GetOuFromNet() {
+	#	declare -n _ref1="$1"
+	local __arg1="$1"
+	lib.misc.CopyByName _ref1 $__arg1
+	shift
+	local username="$1"
+	local passwd="$2"
+	local filter=${3:-$FLIB_AD_OUFILTER}
+	local searchbase=$(echo DC=$domain | sed -e 's/\./,DC=/g;s/.*/\U&/')
+
+	if [ -z "$domain" ] || [ -z "$username" ] || [ -z "$passwd" ]; then
+		return 1
+	fi
+
+	[ "${#domain_dc[@]}" -eq 0 ] && lib.ad.GetFromDnsRecords
+
+	lib.misc.Debug "lib.ad.GetOuFromNet" "read ou from server through net"
+	local list=$(echo $passwd | net ads search -U "$username" '(&(objectClass=organizationalUnit)(ou=*))' distinguishedName 2>/dev/null | sed -ne "/$filter/{s/.\+: \(.\+\)\$/\1/g;H;\$!d;};\${x;s/^\n//;s/\n/|/g;p}")
+	IFS="|" read -a _ref1 <<<$(echo $list | tr '|' '\n' | sort | tr '\n' '|')
+	lib.misc.Debug "lib.ad.GetOuFromNet" "array size = ${#_ref1[@]}"
+	lib.misc.CopyByName $__arg1 _ref1
+	return 0
+}
+
+# преобразует подразделение из формата(ldap) в формат необходимый для net ads join
+# Пример:
+# <ou> = OU=Компьютеры,OU=ЦО,OU=Отделение ПФР по Магаданской области,DC=0059,DC=PFR,DC=RU
+# return: /Отделение ПФР по Магаданской области/ЦО/Компьютеры
+############
+#-help- lib.ad.ConvertOuFromLdapToNet <ou>
+lib.ad.ConvertOuFromLdapToNet() {
+	echo "$1" | tr ',' '\n' | sed -ne '1{h};2,${G;h};$p' | sed -e '/^DC=/D;s/\s*OU=\(.\+\)\s*$/\/\1/g;' | tr -d '\n'
+	return 0
+}
+
+##################
+# ONLY ASTRA
+# Проверяет минимальную версию Астры. Аргумент: Либо номер update, либо Bulletin
+#################
+#-help- lib.ad.AstraVersionMatchBetter <number update|Bulletin>
+lib.ad.AstraVersionMatchBetter() {
+
+	if [ "$OS_RELEASE_ID" != "astra" ] || [ -z "$1" ]; then
+		return 0
+	fi
+	if [ -r /etc/astra_update_version ]; then
+		if [ -z "$OS_RELEASE_UPDATE_ID" ] || [ -z "$OS_RELEASE_UPDATE_NAME" ]; then
+			lib.misc.Debug "lib.ad.AstraVersionMatchBetter" "cached update version"
+			OS_RELEASE_UPDATE_ID=$(sed -n 's/^update\s\+\([[:digit:]]\)/\1/Ip' /etc/astra_update_version)
+			OS_RELEASE_UPDATE_NAME=$(sed -n 's/^bulletin\s\+\([[:alnum:]]\)/\1/Ip' /etc/astra_update_version)
+		fi
+	fi
+	if [ -z "$OS_RELEASE_UPDATE_NAME" ] && [ "$1" != 'main' ]; then
+		return 1
+	fi
+	local status=0
+	isNum "$1" || status=$?
+	lib.misc.Debug "lib.ad.AstraVersionMatchBetter" "required is num 0-yes: $status"
+	if [ $status -eq 0 ]; then
+		[ "$1" -gt "$OS_RELEASE_UPDATE_ID" ] && return 1
+	else
+		[ "${1:0:8}" -gt "${OS_RELEASE_UPDATE_NAME:0:8}" ] && return 1
+	fi
+	lib.misc.Debug "lib.ad.AstraVersionMatchBetter" "version better then required"
+	return 0
+}
+
+################
+# Создает файл для sssd.conf, я отказался от динамической правки существующего, ибо это более затратно. Метод с динамической правкой конфига, в другой "репе"
+# ВАЖНО: переменная <domain> должна быть задана
+#-help- lib.ad.MakeSssdConfig <filename>
+lib.ad.MakeSssdConfig() {
+	local sssd="$1"
+	local DOMAIN=$(echo ${domain} | tr [:lower:] [:upper:])
+
+	[ -z "$sssd" ] && return 1
+
+	local tmpfile=$(mktemp -q)
+	[ $? -ne 0 ] && return 1
+
+	cat >$tmpfile <<EOFFILE
+[sssd]
+    domains = ${DOMAIN}
+    config_file_version = 2
+    services = nss, pam, ifp
+[pam]
+	offline_credentials_expiration = 1
+[ifp]
+    allowed_uids = 0
+
+[domain/${DOMAIN}]
+    access_provider = ad
+    id_provider = ad
+    subdomains_provider = ad
+
+    ad_hostname = ${machine_name:-$(cat /etc/hostname)}
+    ad_domain = ${DOMAIN}
+    ad_gpo_access_control = disabled
+    krb5_realm = ${DOMAIN}
+    krb5_ccname_template = KEYRING:persistent:%U
+    dns_discovery_domain = ${domain}
+
+    enumerate = true  
+
+    dyndns_ttl = 3600 
+    dyndns_update_ptr = true
+    dyndns_update = true
+    dyndns_refresh_interval = 28800
+
+    ldap_id_mapping = True
+
+    use_fully_qualified_names = False
+    cache_credentials = True
+    account_cache_expiration = 14
+
+    realmd_tags = manages-system joined-with-FLIB
+    default_shell = /bin/bash
+    fallback_homedir = /home/%u@%d
+EOFFILE
+	[ -r "$sssd" ] && mv -b --backup=t "${sssd}" "${sssd}.backup" 2>/dev/null
+	mv $tmpfile $sssd
+	chown root.root $sssd
+	chmod og-r $sssd
+	lib.misc.ExecScript "flib_ad_post_sssd_script" "$sssd"
+
+	return 0
+}
+
+##############
+# Создает файл для samba с именем переданным в качестве аргумента
+# ВАЖНО: переменная <domain> должна быть задана
+#
+#-help- lib.ad.MakeSmbConfig <filename>
+lib.ad.MakeSmbConfig() {
+	local samba="$1"
+	local log_file="/var/log/samba/log.samba"
+
+	[ -z "$samba" ] && return 1
+
+	local tmpfile=$(mktemp -q)
+	[ $? -ne 0 ] && return 1
+
+	local workgroup=$(echo ${domain//./} | tr [:lower:] [:upper:])
+
+	cat >$tmpfile <<EOFFILE
+[global]
+    workgroup = $workgroup
+    security = ads
+    realm = $domain
+
+    client signing = yes
+
+    log file = $log_file
+    log level = 1
+    max log size = 500
+
+    winbind enum users = yes
+    winbind enum groups = yes
+    winbind cache time = 600
+    winbind scan trusted domains = no
+    winbind use default domain = no
+
+    vfs objects = acl_xattr
+    map acl inherit = Yes
+    store dos attributes = Yes
+
+    kerberos method = secrets and keytab
+    create krb5 conf = no
+
+    template shell = /bin/bash
+
+    idmap config * : backend = tdb
+    idmap config * : range = 10000-999999
+    idmap config $workgroup : backend = sss
+    idmap config $workgroup : range = 200000-2147483647
+
+[printers]
+   comment = All Printers
+   browseable = no
+   path = /var/spool/samba
+   printable = yes
+   guest ok = no
+   read only = yes
+   create mask = 0700
+[homes]
+   comment = Home Directories
+   browseable = no
+   read only = no
+   create mask = 0755
+   directory mask = 0755
+   valid users = %S
+EOFFILE
+	if [ -r "$samba" ]; then
+		mv -b --backup=t ${samba} ${samba}.backup 2>/dev/null
+	fi
+	mv $tmpfile $samba
+	chmod og+r $samba
+	lib.misc.ExecScript "flib_ad_post_smb_script" "$samba"
+	return 0
+}
+
+##############
+# Создает файл для kerberos с именем переданным в качестве аргумента
+# ВАЖНО: переменная <domain>,<master_dc>,<domain_dc> должны быть заданы.
+#
+#-help- lib.ad.MakeKrb5Config <filename>
+lib.ad.MakeKrb5Config() {
+	local krb5="$1"
+	local DOMAIN=$(echo ${domain} | tr [:lower:] [:upper:])
+	local WORKGROUP=$(echo ${domain//./} | tr [:lower:] [:upper:])
+
+	[ -z "$krb5" ] && return 1
+
+	local tmpfile=$(mktemp -q)
+	[ $? -ne 0 ] && return 1
+
+	cat >$tmpfile <<EOFFILE
+[libdefaults]
+    default_realm = $DOMAIN
+    dns_lookup_realm = false
+    dns_lookup_kdc = true
+#	if you app used krb5 and app broken, because username@realm != username@REALM	
+	canonicalize = true
+    rdns = false
+#	DES-CBC-CRC DES-CBC-MD5 allowed for dyn dns from microsoft
+    allow_weak_crypto = true
+    default_tgs_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96 RC4-HMAC DES-CBC-CRC DES-CBC-MD5
+    default_tkt_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96 RC4-HMAC DES-CBC-CRC DES-CBC-MD5
+    preferred_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96 RC4-HMAC DES-CBC-CRC DES-CBC-MD5
+    ccache_type = 4
+    proxiable = true
+    forwardable = true
+    udp_preference_limit = 0
+    ticket_lifetime = 24h
+    renew_lifetime = 7d
+[domain_realm]
+    .$domain = $DOMAIN
+    $domain = $DOMAIN
+[realms]
+    $DOMAIN = {
+    master_kdc = $master_dc
+      $(for i in ${domain_dc[@]:1}; do echo -e "\tkdc = $i"; done)
+    }
+	# ONLY FOR gvfs. gvfs still bug, but auth with kerberos -> username@WORKGROUP not username@DOMAIN, if authentication share not working with gnome, update gvfs
+    $WORKGROUP = {
+    master_kdc = $master_dc
+      $(for i in ${domain_dc[@]:1}; do echo -e "\tkdc = $i"; done)
+    }
+
+EOFFILE
+	if [ -r "$krb5" ]; then
+		mv -b --backup=t ${krb5} ${krb5}.backup 2>/dev/null
+	fi
+	mv $tmpfile $krb5
+	chmod og+r $krb5
+	lib.misc.ExecScript "flib_ad_post_krb5_script" "$krb5"
+	return 0
+}
+
+#-help- lib.ad.Process <username> <password> <domain> [ machine_name ] [ ou ]
+lib.ad.Process() {
+	local username="$1"
+	local password="$2"
+	local domain="$3"
+	local machine_name=${4:-"$(cat /etc/hostname)"}
+	local ou="$5"
+	local status=0
+
+	if [ -z "$username" ] || [ -z "$password" ] || [ -z "$domain" ]; then
+		echo 'usage: lib.ad.Process <username> <password> <domain> [ machine_name ] [ ou ] '
+		return 1
+	fi
+
+	if [ $(id -u) -ne 0 ]; then
+		return 1
+	fi
+
+	echo "--- Проверка регистрации компьютера в домене"
+	echo 'test' | net ads testjoin
+	if [ $? -eq 0 ]; then
+		echo "**ОШИБКА**:  Компьютер зарегистрирован в домене.  Используйте net ads leave -U $username для вывода из домена"
+		return 2
+	fi
+
+	if [ -z "$master_dc" ]; then
+		lib.ad.GetFromDnsRecords || return 3
+	fi
+
+	echo "--- Синхронизация времени с контроллером AD, для регистрации"
+	net time set -S $domain
+	if [ $? -ne 0 ]; then
+		echo "**ОШИБКА**: синхронизация времени с контроллером домена"
+		return 4
+	fi
+
+	echo -e "\n\n\n--- Установка имени компьютера: [ $machine_name ]"
+	lib.misc.SetHostname $machine_name
+
+	echo "--- Создания файла конфигурации для SAMBA $FLIB_AD_SMB_CONFIG"
+	[ -n "$FLIB_AD_SMB_CONFIG" ] && lib.ad.MakeSmbConfig "$FLIB_AD_SMB_CONFIG"
+
+	echo "--- Создания файла конфигурации для KRB5 $FLIB_AD_KRB5_CONFIG"
+	[ -n "$FLIB_AD_KRB5_CONFIG" ] && lib.ad.MakeKrb5Config "$FLIB_AD_KRB5_CONFIG"
+
+	echo "--- Создания файла конфигурации для SSSD: $FLIB_AD_SSSD_CONFIG"
+	[ -n "$FLIB_AD_SSSD_CONFIG" ] && lib.ad.MakeSssdConfig "$FLIB_AD_SSSD_CONFIG"
+
+	local CMD="echo $password | net ads join -v -U $username osName=\"$OS_RELEASE_NAME\" osVer=\"${OS_RELEASE_UPDATE_NAME:-$OS_RELEASE_VERSION_ID}\""
+
+	[ -n "$ou" ] && CMD+=" createcomputer=\"$ou\""
+
+	lib.misc.ExecScript "flib_ad_pre_hook"
+
+	echo "--- Регистрируем компьютер:[$machine_name], OS:[$OS_RELEASE_NAME], UPDATE:[$OS_RELEASE_UPDATE_NAME] в домен: $domain"
+	eval "$CMD"
+	status=$?
+
+	if [ $status -eq 0 ]; then
+		lib.misc.ExecScript "flib_ad_post_hook"
+	fi
+	return $status
+}
+
+##########################################################################
+#
+#			PAM MOUNT SECTION
+#
+##########################################################################
+#-help- lib.pammount.GetRequiredPackages
+lib.pammount.GetRequiredPackages() {
+	echo "${flib_pammount_packages[@]}"
+	return 0
+}
+
+##########
+#  XML module only for pam_mount.conf.xml
+##########
+#-help- lib.xml.ReadWithoutComment <filename>
+lib.xml.ReadWithoutComment() {
+	sed -e :a -re 's/<!--.*?-->//g;/<!--/N;//ba' "${1:-/dev/null}"
+	return $?
+}
+#-help- lib.xml.ReadAttrFromTag <tag> <attr>
+lib.xml.ReadAttrFromTag() {
+	if [ -z "$1" ] || [ -z "$2" ]; then
+		return 1
+	fi
+	local c='"\([^"]*\)"\s.*'
+	echo "$1" | sed -n "s|<.*$2=$c/>|\1|p"
+	return 0
+}
+#
+# <tag attr1="" attr2="" />  xml standard required <tag .....> </tag>
+#-help- lib.xml.ReadTags <filename> <tag> [attr]
+lib.xml.ReadTags() {
+	if [ ! -r "$1" ] || [ -z "$2" ]; then
+		return 1
+	fi
+	res=$(lib.xml.ReadWithoutComment "$1" | sed -n ":a;/<$2.*\/>/{s/\n//g;p;d};/<$2/N;//ba")
+	# from tag read attr
+	[ -n "$3" ] && res=$(lib.xml.ReadAttrFromTag "$res" "$3")
+	echo "$res"
+	return $?
+}
+#-help- lib.xml.ChangeAttrInTag <filename> <tag> <attr> <newvalue>
+lib.xml.ChangeAttrInTag() {
+	if [ ! -r "$1" ] || [ -z "$2" ] || [ -z "$3" ] || [ -z "$4" ]; then
+		return 1
+	fi
+	sed -i -e :a -re "/<\!--.*?-->/{p;d};/<\!--/N;//ba;s/(<$2\s+$3=\").*(\".*$)/\1$4\2/" $1
+}
+
+# specific pam_mount.conf.xml
+#-help- lib.xml.ChangeAttrInTag <filename> <newtag>
+lib.xml.AppendTag() {
+	if [ ! -r "$1" ] || [ -z "$2" ]; then
+		return 1
+	fi
+	sed -i -e :a -re "/<\!--.*?-->/{p;d};/<\!--/N;//ba;s|(.*)</pam_mount>|\1\n$2\n</pam_mount>|" $1
+}
+
+#-help- lib.pammount.GetVolumes ref_array_tags <filename>
+lib.pammount.GetVolumes() {
+	#	declare -n _ref="$1"
+	local _arg1="$1"
+	#	lib.misc.CopyByName _ref $_arg1
+	local _ref=()
+	shift
+	[ -z "$1" ] && return 1
+	local var="$(lib.xml.ReadTags "$1" volume | tr '\n' '|')"
+	IFS='|' read -a _ref <<<$(echo "$var")
+	lib.misc.CopyByName $_arg1 _ref
+	return 0
+}
+#-help- lib.pammount.GetGroupsFromVolumes ref_array_groups <filename>
+lib.pammount.GetGroupsFromVolumes() {
+	#	declare -n _ref1="$1"
+	local _arg1="$1"
+	#	lib.misc.CopyByName _ref $_arg1
+	shift
+	local tmp=()
+	[ -z "$1" ] && return 1
+	local var="$(lib.xml.ReadTags "$1" volume pgrp | tr '\n' '|')"
+	IFS='|' read -a tmp <<<$(echo "$var")
+	lib.misc.UniqArray tmp
+	#	_ref1=("${tmp[@]}")
+	lib.misc.CopyByName $_arg1 tmp
+	return 0
+}
+#-help- lib.pammount.GetUsersFromVolumes ref_array_users <filename>
+lib.pammount.GetUsersFromVolumes() {
+	#	declare -n _ref1="$1"
+	local _arg1="$1"
+	#	lib.misc.CopyByName _ref $_arg1
+	shift
+	local tmp=()
+	[ -z "$1" ] && return 1
+	local var="$(lib.xml.ReadTags "$1" volume user | tr '\n' '|')"
+	IFS='|' read -a tmp <<<$(echo "$var")
+	lib.misc.UniqArray tmp
+	#	_ref1=("${tmp[@]}")
+	lib.misc.CopyByName $_arg1 tmp
+	return 0
+}
+
+#-help- lib.pammount.SearchUsername  ref_array search [ fields(range 1..7 ) ] field format: "\\1\|\\2" separator '\|' MUST
+lib.pammount.SearchUsername() {
+	#	declare -n _ref="$1"
+	local _arg1="$1"
+	shift
+	local _ref=()
+	local search="${1:-.*}"
+	local fields="${2:-\\1\|\\5}"
+	local service=${FLIB_MISC_SEARCH_SERVICE:-}
+	local v=$(getent $service passwd | sed -n "s|^\([[:alnum:]]*\):\([^:]*\):\([^:]*\):\([^:]*\):\([^:]*\):\([^:]*\):\(.*\)$|$fields\||p" | grep -i "$search" | tr -d '\n')
+	IFS='|' read -a _ref <<<$(echo ${v:-"none|none"})
+	lib.misc.CopyByName $_arg1 _ref
+	return 0
+}
+
+#-help- lib.pammount.SearchGroup ref_array search [ fields(range 1..4 ) ] field format: "\\1\|\\2" separator '\|' MUST
+lib.pammount.SearchGroup() {
+	#	declare -n _ref="$1"
+	local _arg1="$1"
+	shift
+	local _ref=()
+	local search="${1:-.*}"
+	local fields="${2:-\\1\|\\3}"
+	local service=${FLIB_MISC_SEARCH_SERVICE:-}
+	local v=$(getent $service group | sed "s|^\([^:]*\):\([^:]*\):\([^:]*\):\(.*\)$|$fields\||" | grep -i "$search" | tr -d '\n')
+	IFS='|' read -a _ref <<<$(echo ${v:-"none|none"})
+	lib.misc.CopyByName $_arg1 _ref
+	return 0
+}
+
+####
+# Возвращает список уникальных опций из аргументов
+#-help- lib.pammount.UniqOpt <options1> <options2>
+lib.pammount.UniqOpt() {
+	echo $(for i in $(echo $1,$2 | tr ',' '\n'); do echo "${i%=*}"; done | sort -u | tr '\n' ' ') | tr ' ' ','
+}
+####
+# Удаляет значение пользовательских опций для pam mount
+#-help- lib.pammount.UserOpt <options>
+lib.pammount.UserOpt() {
+	echo $(for i in $(echo $1 | tr ',' '\n'); do echo -n "${i%=*} "; done) | tr ' ' ','
+}
+
+#########
+# Читает из xml файла опции для монтирования которые можно использовать в пользовательском окружении
+#-help- lib.pammount.GetGlobalMntOptions
+lib.pammount.GetGlobalMntOptions() {
+
+	local arr=$(lib.xml.ReadTags "$FLIB_PAMMOUNT_GCONFIG" mntoptions allow | tr ',' ' ')
+	echo $(for i in ${arr[@]}; do echo "${i%=*}"; done | sort -u | tr '\n' ' ') | tr ' ' ','
+}
+
+#-help- lib.pammount.IsExistMountPointForUser <username> <mountpoint> [ ~username/.pam_mount.conf.xml ]
+lib.pammount.IsExistMountPointForUser() {
+	local name="$1"
+	local volumes=()
+	local vgroups=()
+	local vusers=()
+
+	if [ -z "$name" ] || [ -z "$2" ]; then
+		return 1
+	fi
+
+	local isgroup=0
+	lib.misc.Debug "lib.pammount.IsExistMountPointForUser" "enter name=$name"
+	if [ "${name:0:1}" = "%" ]; then
+		name="${name:1}"
+		lib.misc.Debug "lib.pammount.IsExistMountPointForUser" "catch group: $name"
+		isgroup=1
+	fi
+	lib.misc.Debug "lib.pammount.IsExistMountPointForUser" "Ok. Step one: check groups and points"
+
+	lib.misc.Debug "lib.pammount.IsExistMountPointForUser" "is group: $isgroup"
+	lib.pammount.GetVolumes volumes $FLIB_PAMMOUNT_GCONFIG
+	lib.misc.Debug "lib.pammount.IsExistMountPointForUser" "volumes: ${volumes[@]}\n"
+
+	lib.pammount.GetGroupsFromVolumes vgroups $FLIB_PAMMOUNT_GCONFIG
+	lib.pammount.GetUsersFromVolumes vusers $FLIB_PAMMOUNT_GCONFIG
+	lib.misc.Debug "lib.pammount.IsExistMountPointForUser" "uniq groups: ${vgroups[@]}"
+	for group in "${vgroups[@]}"; do
+		if [ $isgroup -eq 0 ] && [ "$name" != '@' ]; then
+			echo "$(lib.misc.GetGroupUsers "$group")" | grep -q "$name" || continue
+			lib.misc.Debug "lib.pammount.IsExistMountPointForUser" "user: $name in group: \"$group\""
+		fi
+		for vol in "${volumes[@]}"; do
+			local grp="$(lib.xml.ReadAttrFromTag "$vol" "pgrp")"
+			if [ $isgroup -eq 1 ]; then
+				lib.misc.Debug "lib.pammount.IsExistMountPointForUser" "check \"$grp\" with \"$name\""
+				[ "$grp" = "$name" ] || continue
+			fi
+			if [ "$grp" = "$group" ] || [ "$name" = '@' ]; then
+				local point="$(lib.xml.ReadAttrFromTag "$vol" "mountpoint")"
+				lib.misc.Debug "lib.pammount.IsExistMountPointForUser" "check \"$point\" with \"$2\""
+				if [ "$point" = "$2" ]; then
+					echo "$vol"
+					lib.misc.Debug "lib.pammount.IsExistMountPointForUser" "Found mountpoint for username=$name"
+					return 254
+				fi
+			fi
+		done
+	done
+	if [ $isgroup -eq 1 ]; then
+		lib.misc.Debug "lib.pammount.IsExistMountPointForUser" "get out because it's group."
+		return 0
+	fi
+
+	lib.misc.Debug "lib.pammount.IsExistMountPointForUser" "Ok. Step two: check users and points in global config"
+	for user in "${vusers[@]}"; do
+		if [ "$name" != "@" ] && [ "$user" != "$name" ]; then
+			continue
+		fi
+		for vol in "${volumes[@]}"; do
+			local u="$(lib.xml.ReadAttrFromTag "$vol" "user")"
+			if [ "$u" = "$user" ] || [ "$u" = '*' ]; then
+				point="$(lib.xml.ReadAttrFromTag "$vol" "mountpoint")"
+				lib.misc.Debug "lib.pammount.IsExistMountPointForUser" "check \"$point\" with \"$2\" in global file"
+				if [ "$point" = "$2" ]; then
+					echo "$vol"
+					lib.misc.Debug "lib.pammount.IsExistMountPointForUser" "Found mountpoint for username=$name"
+					return 254
+				fi
+			fi
+		done
+	done
+	lib.misc.Debug "lib.pammount.IsExistMountPointForUser" "Ok. Step three: check users and points in local config"
+	[ -z "$3" ] && return 0 # early exit, if filename not found for user config.
+	lib.pammount.GetVolumes volumes "$3"
+	for vol in "${volumes[@]}"; do
+		local point="$(lib.xml.ReadAttrFromTag "$vol" "mountpoint")"
+		lib.misc.Debug "lib.pammount.IsExistMountPointForUser" "check \"$point\" with \"$2\" in local file"
+		if [ "$point" = "$2" ]; then
+			echo "$vol"
+			lib.misc.Debug "lib.pammount.IsExistMountPointForUser" "Found mountpoint for username=$name"
+			return 254
+		fi
+	done
+	lib.misc.Debug "lib.pammount.IsExistMountPointForUser" "Done."
+	return 0
+}
+
+#-help- lib.pammount.Process <username> <resource(//server/share)> <mountpoint> [<options>]
+lib.pammount.Process() {
+	local username="$1"
+	local resource="$2"
+	local point="$3"
+	local options="${4:-$FLIB_PAMMOUNT_OPT}"
+	local prefixgroup=''
+	local filename=$FLIB_PAMMOUNT_GCONFIG
+	local userfilename=''
+	local pers=''
+	local homedir=''
+
+	if [ -z "$username" ] || [ -z "$resource" ] || [ -z "$point" ]; then
+		return 255
+	fi
+
+	[ -w "$filename" ] || return 5
+
+	lib.misc.Debug "lib.pammount.Process" "username=$username resource=$resource point=$point"
+
+	case "${username:0:1}" in
+	'@')
+		pers='user="*"'
+		;;
+	'%')
+		prefixgroup='%'
+		username="${username:1}"
+		pers="pgrp=\"$username\""
+		lib.misc.Debug "lib.pammount.Process" "username is group. prefixgroup=$prefixgroup, filename=$filename"
+		;;
+	'~')
+		username="${username:1}"
+		homedir="$(lib.misc.GetUserHomeDir "$username")"
+		[ -z "$homedir" ] && return 254
+		filename="$homedir/$FLIB_PAMMOUNT_UCONFIG"
+		userfilename="$filename"
+		lib.misc.Debug "lib.pammount.Process" "username have ~. Make volume in homedir user. filename=$filename"
+		;;
+	*)
+		pers="user=\"$username\""
+		homedir="$(lib.misc.GetUserHomeDir "$username")"
+		;;
+	esac
+	# create point absolutly path
+	if [ "${point:0:1}" = '~' ]; then
+		if [ -z "$FLIB_PAMMOUNT_DIR" ]; then
+			[ "${username:0:1}" = "@" ] && echo "homedir for : ${username/@/"All users"} not allowed"
+			[ -n "$prefixgroup" ] && echo "homedir for groups not allowed"
+			return 8
+		fi
+		if [ -z "$homedir" ]; then
+			if [ -n "$prefixgroup" ]; then
+				echo "homedir for group: ${username/@/"All users"} not found"
+			else
+				echo "homedir for : ${username/@/"All users"} not found"
+			fi
+			return 8
+		fi
+		point="$homedir/${point:1}"
+	else
+		if [ "${point:0:1}" != '/' ] && [ -n "$FLIB_PAMMOUNT_DIR" ]; then
+			point="$FLIB_PAMMOUNT_DIR/%(USER)/$point"
+		fi
+	fi
+	lib.misc.Debug "lib.pammount.Process" "absolutly path point $point"
+	local status=0
+	local result=''
+	result="$(lib.pammount.IsExistMountPointForUser "$prefixgroup$username" "$point" "$userfilename")" || status=$?
+	if [ $status -ne 0 ]; then
+		lib.misc.Debug "lib.pammount.Process" "user mountpoint exist"
+		echo "$result"
+		return 3
+	fi
+	local arr_resource=($(echo $resource | tr '/' ' '))
+	local server=${arr_resource[@]:0:1}
+	local share=$(echo ${arr_resource[@]:1} | tr ' ' '/')
+
+	lib.misc.Debug "lib.pammount.Process" "parse resource arr=\"${arr_resource[@]}\" server=$server share=$share "
+	[ -z "$share" ] && return 4
+
+	local volume="<volume $pers fstype=\"cifs\" server=\"$server\" path=\"$share\" mountpoint=\"$point\" options=\"$options\" />"
+
+	lib.misc.Debug "lib.pammount.Process" "server=$server\nshare=$share\nvolume='$volume'"
+
+	local globopt=$(lib.pammount.GetGlobalMntOptions)
+	local useropt=$(lib.pammount.UserOpt "$options")
+	local newglobopt=$(lib.pammount.UniqOpt "$globopt" "$useropt")
+
+	lib.misc.Debug "lib.pammount.Process" "globopt=\"$globopt\"\n useropt=\"$useropt\"\n newglobopt=\"$newglobopt\""
+
+	#pre hook
+	lib.misc.ExecScript "flib_pammount_pre_hook"
+
+	# изменяем глобальный файл, только если были изменения
+	[ "$globopt" != "$newglobopt" ] && lib.xml.ChangeAttrInTag "$FLIB_PAMMOUNT_GCONFIG" mntoptions allow "$newglobopt"
+
+	# personale .pam_mount.conf need change or append luserconf
+	if [ -n "$userfilename" ]; then
+		local tags=$(lib.xml.ReadTags "$FLIB_PAMMOUNT_GCONFIG" luserconf name)
+		if [ -z "$tags" ]; then
+			lib.xml.AppendTag "$FLIB_PAMMOUNT_GCONFIG" "<luserconf name=\"$FLIB_PAMMOUNT_UCONFIG\" />"
+		else
+			[ "$tags" != "$FLIB_PAMMOUNT_UCONFIG" ] && lib.xml.ChangeAttrInTag "$FLIB_PAMMOUNT_GCONFIG" luserconf name "$FLIB_PAMMOUNT_UCONFIG"
+		fi
+		if [ ! -r "$userfilename" ]; then
+			lib.misc.Debug "lib.pammount.Process" "make local pam_mount.conf for user: $username"
+			touch "$userfilename" 2>/dev/null
+			echo "<?xml version=\"1.0\" encoding=\"utf-8\" ?>\n<pam_mount>\n</pam_mount>" >"$userfilename"
+			chown $(id -u $username).$(id -g $username) "$userfilename"
+			chmod og-r "$userfilename"
+		fi
+	fi
+
+	lib.misc.Debug "lib.pammount.Process" "filename=$filename"
+	# at last... create new volume
+	lib.xml.AppendTag "$filename" "$volume"
+
+	# Подготовим площадку для домашних ресурсов через pammount
+	if [ -n "$FLIB_PAMMOUNT_DIR" ] && [ ! -d "$FLIB_PAMMOUNT_DIR" ]; then
+		mkdir -p "$FLIB_PAMMOUNT_DIR"
+		chmod og-r "$FLIB_PAMMOUNT_DIR"
+	fi
+
+	# make if need global script in /etc/profile.d
+	[ -n "$FLIB_MOUNT_DISK" ] && lib.misc.MakeScriptForNetworkDisks
+
+	lib.misc.ExecScript "flib_pammount_post_hook"
+
+	return 0
+}
+
+##########################################################################
+#
+#			AUTOFS SECTION
+#
+##########################################################################
+#-help- lib.pammount.GetRequiredPackages
+lib.autofs.GetRequiredPackages() {
+	echo "${flib_autofs_packages[@]}"
+	return 0
+}
+
+#-help- lib.autofs.Process  -r <resource> -p <mount point> -o <options>
+lib.autofs.Process() {
+	local resource=''
+	local point=''
+	local opt=''
+	local id=''
+	while [ -n "$1" ]; do
+		id="$1"
+		shift
+		case "$id" in
+		-r)
+			resource="$1"
+			;;
+		-p)
+			point="$1"
+			;;
+		-o)
+			opt="$1"
+			;;
+		*)
+			echo 'lib.autofs.Process arg not recognised '
+			return 1
+			;;
+		esac
+		shift
+	done
+	if [ -z "$resource" ] || [ -z "$point" ] || [ -z "$opt" ]; then
+		echo '1 or more is arguments empty'
+		return 1
+	fi
+	dir_auto=$(sed -n 's/^+dir:\(.\+\)/\1/p' /etc/auto.master)
+	if [ -z "$dir_auto" ]; then
+		if [ -n "$(sed -n 's/^#+dir:\(.\+\)/\1/p' /etc/auto.master)" ]; then
+			$(sed -i -e 's/^#+dir/+dir/' /etc/auto.master)
+		fi
+		dir_auto=$(sed -n 's/^+dir:\(.\+\)/\1/p' /etc/auto.master)
+		if [ -z "$dir_auto" ]; then
+			echo "not found +dir: records in /etc/auto.master"
+			return 1
+		fi
+	fi
+	if [ ! -r "$dir_auto" ]; then
+		mkdir "$dir_auto" || return 1
+	fi
+	[ -r $dir_auto/network-disk.autofs ] || echo -e "/-\t\t\t$dir_auto/network-disk.list" >$dir_auto/network-disk.autofs
+	[ -r $dir_auto/network-disk.list ] || touch $dir_auto/network-disk.list
+	chmod og-rw "$dir_auto/network-disk.list"
+	if [ "${point:0:1}" != '/' ]; then
+		for name in $(sed -n -e "s|^${FLIB_AUTOFS_DIR%%/}/\([[:alnum:]]\+\).*|\1|p" $dir_auto/network-disk.list); do
+			if [ "$point" = "$name" ]; then
+				echo "point \"$point\" is existing"
+				return 1
+			fi
+		done
+		point=${FLIB_AUTOFS_DIR%%/}/${point}
+		if [ -n "$FLIB_AUTOFS_DIR" ]; then
+			lib.misc.MakeScriptForNetworkDisks
+			mkdir -p "$point"
+		fi
+	fi
+	lib.misc.ExecScript "flib_autofs_post_hook" "$resource" "$point" "$opt"
+	echo -e "$point\t-fstype=cifs,nosuid,nodev,${opt// /}\t:$resource" >>$dir_auto/network-disk.list
+	local status=0
+	systemctl is-enabled autofs || status=$?
+	if [ $status -ne 0 ]; then
+		systemctl enable autofs
+	fi
+	status="$(systemctl show --property MainPID --value autofs 2>/dev/null)"
+	if [ -n "$status" ]; then
+		if [ "$status" -ne 0 ]; then
+			kill -HUP $status
+		else
+			systemctl restart autofs
+		fi
+	fi
+	lib.misc.ExecScript "flib_autofs_post_hook" "$resource" "$point" "$opt"
+	return 0
+}
+
+
+#BASH=/usr/bin/bash
+#BASHOPTS=cmdhist:extquote:force_fignore:hostcomplete:interactive_comments:progcomp:promptvars:sourcepath
+#BASH_ALIASES=()
+#BASH_ARGC=([0]="1")
+#BASH_ARGV=([0]="/home/ladmin/ad/function")
+
+if [ -n "$(readlink -fq $0)" ]; then
+	_flib_path_=$(dirname $(readlink -fq $0))
+else
+	_flib_path_=$(dirname $0)
+fi
+
+if [ ! -r "$_flib_path_/config" ]; then
+	if [ -z "${BASH_SOURCE[1]}" ]; then
+		_flib_path_="$(dirname ${BASH_SOURCE[0]})"
+	else
+		_flib_path_=$(dirname $0)
+		[ -r "$_flib_path_/config" ] || _flib_path_="$(pwd)"
+	fi
+fi	
+echo "use path: $_flib_path_"
+
+_flib_path_=${_flib_path_:-.}
+
+echo "Loading config"
+. "${_flib_path_}/config"
+
+#################################
+#  DETECT OS after load script
+#################################
+lib.misc.DetectOS
+echo "Detecting OS: [${OS_RELEASE_NAME:-unknown}] like [${OS_RELEASE_ID_LIKE:-unknown}]"
