@@ -68,9 +68,15 @@ flib_pammount_packages_rhel=(pam_mount cifs-utils)
 flib_autofs_packages_rhel=(autofs libsss_autofs)
 flib_ad_post_hook_rhel="posthook_ad_rhel"
 flib_pammount_post_hook_rhel="posthook_pammount_rhel"
+
 #ASTRA
 flib_ad_post_sssd_script_astra='script_sssd_astra'
 flib_ad_post_hook_astra="posthook_ad_astra"
+
+#REDOS
+flib_ad_post_hook_redos="posthook_ad_redos"
+flib_pammount_post_hook_redos="posthook_pammount_redos"
+
 
 #if system type not detected
 #flib_misc_cmd_exist_="true"
