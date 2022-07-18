@@ -1,6 +1,13 @@
 
-authselect select sssd
-authselect enable-feature with-mkhomedir
+authselect current | grep -q sssd
+if  [ $? -ne 0 ]; then
+    authselect select sssd --force
+fi
+authselect current | grep -q with-mkhomedir
+if  [ $? -ne 0 ]; then 
+    authselect enable-feature with-mkhomedir
+fi
+
 systemctl enable winbind smb nmb sssd oddjobd 
 systemctl restart sssd smb nmb winbind oddjobd 
 
