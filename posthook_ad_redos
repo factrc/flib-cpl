@@ -1,4 +1,5 @@
 
+
 #
 # В REDOS по умолчанию включен SELinux в режим enforcing
 # Почему то нет доступа у процесса winbind на urandom, соответственно разрешим работать с этим устройством
@@ -28,3 +29,5 @@ EOF
     fi
     echo 'SELinux ok'
 fi
+
+exit 0

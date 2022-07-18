@@ -52,6 +52,7 @@ FLIB_AD_KRB5_CONFIG=/etc/krb5.conf
 #   flib_ad_post_hook_ubuntu='/path/script2'
 #   executing  /path/script2 and next /path/script1
 #
+
 # DEBIAN LIKE
 flib_misc_cmd_exist_debian="dpkg -s"
 flib_misc_cmd_install_debian="apt install -y"

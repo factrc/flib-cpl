@@ -1,5 +1,5 @@
+
 authselect select sssd
-# mkhomedir required oddjobd 
 authselect enable-feature with-mkhomedir
 systemctl enable winbind smb nmb sssd oddjobd 
 systemctl restart sssd smb nmb winbind oddjobd 
@@ -12,3 +12,4 @@ if [ "$se" = "enforcing" ]; then
     setsebool -P use_samba_home_dirs 1
     echo 'SELinux ok'
 fi
+exit 0
