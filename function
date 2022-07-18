@@ -578,7 +578,7 @@ lib.ad.MakeSssdConfig() {
     config_file_version = 2
     services = nss, pam, ifp
 [pam]
-	offline_credentials_expiration = 1
+    offline_credentials_expiration = 1
 [ifp]
     allowed_uids = 0
 
@@ -588,14 +588,14 @@ lib.ad.MakeSssdConfig() {
     subdomains_provider = ad
 
     ad_hostname = ${machine_name:-$(cat /etc/hostname)}
-	ad_server = $ad_server
+    ad_server = $ad_server
     ad_domain = ${DOMAIN}
     ad_gpo_access_control = disabled
     krb5_realm = ${DOMAIN}
     krb5_ccname_template = KEYRING:persistent:%U
     dns_discovery_domain = ${domain}
 
-    enumerate = true  
+    enumerate = true
 
     dyndns_ttl = 3600 
     dyndns_update_ptr = true
@@ -772,7 +772,7 @@ lib.ad.Process() {
 	echo "--- Проверка регистрации компьютера в домене"
 	echo 'test' | net ads testjoin
 	if [ $? -eq 0 ]; then
-		echo "**ОШИБКА**:  Компьютер зарегистрирован в домене.  Используйте net ads leave -U $username для вывода из домена"
+		echo -e "**ОШИБКА**:  Компьютер зарегистрирован в домене.\n\tИспользуйте net ads leave -U $username для вывода из домена.\n\tРекомендуется после вывода из домена удалить файл /etc/krb5.keytab"
 		return 2
 	fi
 

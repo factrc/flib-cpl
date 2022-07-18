@@ -177,7 +177,7 @@ action.dialog.ad.ExitInfo() {
 	return 0
 }
 ##############
-#
+# 
 ##############
 action.ad.registration() {
 	local background="Регистрация компьютера в Active Directory"
