@@ -24,8 +24,8 @@ EOF
         checkmodule -M -m -o ${tdir}/flib_pammount_access.mod ${tdir}/flib_pammount_access.te
         semodule_package -o ${tdir}/flib_pammount_access.pp -m ${tdir}/flib_pammount_access.mod
         semodule -i ${tdir}/flib_pammount_access.pp
-        rm -f "${tdir}/*"
-        rmdir "${tdir}"
+        rm -f ${tdir}/*
+        rmdir ${tdir}
     fi
     echo 'SELinux ok'
 fi
