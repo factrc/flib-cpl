@@ -1,0 +1,32 @@
+
+#
+# В REDOS по умолчанию включен SELinux в режим enforcing
+# Для доступа к папке по пути $FLIB_PAMMOUNT_DIR необходимо правило для xdm_t и доступа к домену mnt_t
+# Нужно учесть, что при заходе через ssh, папки монтироваться не будут, так как нужно разрешение для sshd_t -> mnt_t
+se=$(sestatus | sed -ne 's/Current mode:\s\+\(.\+\).*/\1/p')
+if [ "$se" = "enforcing" ]; then
+   echo -e "\nSELinux detected."
+    sudo semodule -l | grep -q ^flib_pammount_access
+    if [ $? -ne 0 ]; then
+        echo -e "REDOS specific: Enable users shares in /mnt for xdm. Please wait..."
+        tdir=$(mktemp -d)
+        [ -z "$tdir" ] && exit 1
+        cat <<EOF>${tdir}/flib_pammount_access.te
+module flib_pammount_access 1.0;
+require {
+        type xdm_t;
+        type mnt_t;
+        class dir { add_name create setattr write };
+        class file getattr;
+}
+allow xdm_t mnt_t:dir { add_name create setattr write };
+EOF
+        checkmodule -M -m -o ${tdir}/flib_pammount_access.mod ${tdir}/flib_pammount_access.te
+        semodule_package -o ${tdir}/flib_pammount_access.pp -m ${tdir}/flib_pammount_access.mod
+        semodule -i ${tdir}/flib_pammount_access.pp
+        rm -f "${tdir}/*"
+        rmdir "${tdir}"
+    fi
+    echo 'SELinux ok'
+fi
+exit 0

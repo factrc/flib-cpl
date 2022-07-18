@@ -1,0 +1,30 @@
+
+#
+# В REDOS по умолчанию включен SELinux в режим enforcing
+# Почему то нет доступа у процесса winbind на urandom, соответственно разрешим работать с этим устройством
+# правило semanage permissive -a winbind_t на REDOS не работает, так как по домену winbind_t пусто
+se=$(sestatus | sed -ne 's/Current mode:\s\+\(.\+\).*/\1/p')
+   echo -e "\nSELinux detected."
+    sudo semodule -l | grep -q ^flib_winbind_access
+    if [ $? -ne 0 ]; then
+        echo -e "REDOS specific: Enable winbindd access to urandom. Please wait..."
+        tdir=$(mktemp -d)
+        [ -z "$tdir" ] && exit 1
+        cat <<EOF>${tdir}/flib_winbind_access.te
+module flib_winbind_access 1.0;
+require {
+        type urandom_device_t;
+        type winbind_t;
+        class chr_file write;
+        class file getattr;
+}
+allow winbind_t urandom_device_t:chr_file write;
+EOF
+        checkmodule -M -m -o ${tdir}/flib_winbind_access.mod ${tdir}/flib_winbind_access.te
+        semodule_package -o ${tdir}/flib_winbind_access.pp -m ${tdir}/flib_winbind_access.mod
+        semodule -i ${tdir}/flib_winbind_access.pp
+        rm -f "${tdir}/*"
+        rmdir "${tdir}"
+    fi
+    echo 'SELinux ok'
+fi

@@ -58,18 +58,18 @@ flib_misc_cmd_install_debian="apt install -y"
 flib_ad_packages_debian=(sssd sssd-ad sssd-krb5 sssd-ldap sssd-dbus samba samba-common winbind libpam-sss krb5-user krb5-config ldap-utils dnsutils)
 flib_pammount_packages_debian=(libpam-mount cifs-utils)
 flib_autofs_packages_debian=(autofs5)
-flib_ad_post_hook_debian="posthook_ad_debian.sh"
+flib_ad_post_hook_debian="posthook_ad_debian"
 # RHEL LIKE
 flib_misc_cmd_exist_rhel="yum list installed"
 flib_misc_cmd_install_rhel="yum install -y"
 flib_ad_packages_rhel=(sssd sssd-ad sssd-krb5 sssd-ldap sssd-dbus samba samba-common samba-winbind sssd-winbind-idmap krb5-workstation openldap-clients)
 flib_pammount_packages_rhel=(pam_mount cifs-utils)
 flib_autofs_packages_rhel=(autofs libsss_autofs)
-flib_ad_post_hook_rhel="posthook_ad_rhel.sh"
-flib_pammount_post_hook_rhel="posthook_pammount_rhel.sh"
+flib_ad_post_hook_rhel="posthook_ad_rhel"
+flib_pammount_post_hook_rhel="posthook_pammount_rhel"
 #ASTRA
-flib_ad_post_sssd_script_astra='script_sssd_astra.sh'
-flib_ad_post_hook_astra="posthook_ad_astra.sh"
+flib_ad_post_sssd_script_astra='script_sssd_astra'
+flib_ad_post_hook_astra="posthook_ad_astra"
 
 #if system type not detected
 #flib_misc_cmd_exist_="true"

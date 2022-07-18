@@ -209,8 +209,11 @@ lib.misc.ExecScript() {
 			lib.misc.Debug "lib.misc.ExecScript" "script: $script"
 			if [ -f "$script" ]; then
 				lib.misc.Debug "lib.misc.ExecScript" "script \"$script\" with args \"$@\" start."
-				/bin/bash "$script" $@
-				lib.misc.Debug "lib.misc.ExecScript" "script \"$script\" exit."
+# change call script with local environment
+				( . "$script" $@ )
+				local status=$?
+#				/bin/bash "$script" $@
+				lib.misc.Debug "lib.misc.ExecScript" "script \"$script\" exit: $status"
 			fi
 		fi
 	done
@@ -305,7 +308,7 @@ lib.misc.SetHostname() {
 	if [ "$name" != "$tmpname" ]; then
 		local host=${name%%.*}
 		lib.misc.Debug "lib.misc.SetHostname" "oldhost = $tmpname , host = $host , newhost = $name"
-		#	hostnamectl required dbus.... if installer dbus failed not check failed
+		#	hostnamectl required dbus.... if installer dbus failed, we not check failed
 		hostnamectl set-hostname $name
 		hostname "$name" || return 1
 		grep -q "^127.0.1.1" /etc/hosts || echo -e "127.0.1.1\t$name\t$host" >>/etc/hosts
@@ -637,6 +640,7 @@ lib.ad.MakeSmbConfig() {
     workgroup = $workgroup
     security = ads
     realm = $domain
+    #printing = CUPS
 
     client signing = yes
 
@@ -666,7 +670,7 @@ lib.ad.MakeSmbConfig() {
 
 [printers]
    comment = All Printers
-   browseable = no
+   browseable = yes
    path = /var/spool/samba
    printable = yes
    guest ok = no
@@ -713,10 +717,10 @@ lib.ad.MakeKrb5Config() {
     default_realm = $DOMAIN
     dns_lookup_realm = false
     dns_lookup_kdc = true
-#	if you app used krb5 and app broken, because username@realm != username@REALM	
-	canonicalize = true
+#   if you app used krb5 and app broken, because username@realm != username@REALM
+    canonicalize = true
     rdns = false
-#	DES-CBC-CRC DES-CBC-MD5 allowed for dyn dns from microsoft
+#   DES-CBC-CRC DES-CBC-MD5 allowed for dyn dns from microsoft
     allow_weak_crypto = true
     default_tgs_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96 RC4-HMAC DES-CBC-CRC DES-CBC-MD5
     default_tkt_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96 RC4-HMAC DES-CBC-CRC DES-CBC-MD5
@@ -732,15 +736,9 @@ lib.ad.MakeKrb5Config() {
     $domain = $DOMAIN
 [realms]
     $DOMAIN = {
-    master_kdc = $master_dc
+	master_kdc = $master_dc
       $(for i in ${domain_dc[@]:1}; do echo -e "\tkdc = $i"; done)
     }
-	# ONLY FOR gvfs. gvfs still bug, but auth with kerberos -> username@WORKGROUP not username@DOMAIN, if authentication share not working with gnome, update gvfs
-    $WORKGROUP = {
-    master_kdc = $master_dc
-      $(for i in ${domain_dc[@]:1}; do echo -e "\tkdc = $i"; done)
-    }
-
 EOFFILE
 	if [ -r "$krb5" ]; then
 		mv -b --backup=t ${krb5} ${krb5}.backup 2>/dev/null
@@ -1277,13 +1275,6 @@ lib.autofs.Process() {
 	lib.misc.ExecScript "flib_autofs_post_hook" "$resource" "$point" "$opt"
 	return 0
 }
-
-
-#BASH=/usr/bin/bash
-#BASHOPTS=cmdhist:extquote:force_fignore:hostcomplete:interactive_comments:progcomp:promptvars:sourcepath
-#BASH_ALIASES=()
-#BASH_ARGC=([0]="1")
-#BASH_ARGV=([0]="/home/ladmin/ad/function")
 
 if [ -n "$(readlink -fq $0)" ]; then
 	_flib_path_=$(dirname $(readlink -fq $0))
