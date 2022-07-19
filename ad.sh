@@ -198,7 +198,8 @@ action.ad.registration() {
 	fi
 
 	if [[ $(id -u) -ne 0 ]]; then
-		echo -e "**ОШИБКА**: Для регистрации в Active Directory требуются права привелегированного пользователя\n"
+#		dialog --title '**ОШИБКА**' --msgbox "Для регистрации в Active Directory требуются права привилегированного пользователя" 0 0
+		echo -e "**ОШИБКА**: Для регистрации в Active Directory требуются права привилегированного пользователя\n"
 		return 1
 	fi
 
@@ -208,6 +209,7 @@ action.ad.registration() {
 			status=0
 			lib.misc.InstallPackages dialog || status=$?
 			if [ $status -ne 0 ]; then
+#				dialog --title '**ОШИБКА**' --msgbox "Не удалось поставить пакет dialog для продолжения работы." 0 0
 				echo "**ОШИБКА**: Не удалось поставить пакет dialog для продолжения работы."
 				return 255
 			fi
@@ -223,6 +225,7 @@ action.ad.registration() {
 		status=0
 		action.dialog.ad.AstraOutdated $req_version || status=$?
 		if [ $status -ne 0 ]; then
+#			dialog --title '**ОШИБКА**' --msgbox "Отказ от дальнейшей регистрации. Текущая версия Астры требует обновления." 0 0
 			echo "**ОШИБКА**: Отказ от дальнейшей регистрации. Текущая версия Астры требует обновления."
 			return 2
 		fi
@@ -235,6 +238,7 @@ action.ad.registration() {
 	status=0
 	action.dialog.ad.InstallRequiredPackages "${required_packages[@]}"  || status=$?
 	if [ $status -ne 0 ]; then
+#		dialog --title '**ОШИБКА**' --msgbox "Отказ от дальнейшей регистрации. Требуемые пакеты не установлены." 0 0
 		echo "**ОШИБКА**: Отказ от дальнейшей регистрации. Требуемые пакеты не установлены."
 		return 3
 	fi
@@ -245,6 +249,7 @@ action.ad.registration() {
 		status=0
 		action.dialog.ad.GetAdminAccount username password || status=$?
 		if [ $status -ne 0 ]; then
+#			dialog --title '**ОШИБКА**' --msgbox "Отказ от дальнейшей регистрации. Нет учетных данных администратора домена." 0 0
 			echo "**ОШИБКА**: Отказ от дальнейшей регистрации. Нет учетных данных администратора домена."
 			return 3
 		fi
@@ -256,6 +261,7 @@ action.ad.registration() {
 		status=0
 		action.dialog.ad.GetHostnameAndDomain machine_name domain || status=$?
 		if [ $status -ne 0 ]; then
+#			dialog --title '**ОШИБКА**' --msgbox "Отказ от дальнейшей регистрации. Нет данных по домену." 0 0
 			echo "**ОШИБКА**: Отказ от дальнейшей регистрации. Нет данных по домену."
 			return 4
 		fi
@@ -266,6 +272,7 @@ action.ad.registration() {
 	echo "--- Читаем информацию по серверам домена \"$domain\" из DNS ----"
 	lib.ad.GetFromDnsRecords
 	if [ -z "$master_dc" ]; then
+#		dialog --title '**ОШИБКА**' --msgbox "Проверьте правильность настройки DNS клиента(серверов) или правильность указанного домена [$domain] и повторите регистрацию." 0 0
 		echo "**ОШИБКА**: Проверьте правильность настройки DNS клиента(серверов) или правильность указанного домена [$domain] и повторите регистрацию."
 		return 5
 	fi
