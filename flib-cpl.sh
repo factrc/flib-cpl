@@ -19,7 +19,6 @@ status=0
 vals=''
 helpfile="$pp/help_cpl"
 
-#tmp=$(mktemp)
 while [ $status -eq 0 ]; do
     arr=("${arr_menu[@]}")
     lib.misc.DialogWrapper vals status --clear --hfile "$helpfile" --item-help --title 'Функциональная панель для работы с Active Directory. F1 - help' --menu 'Выбор скрипта:' 20 100 5 "${arr[@]}"
@@ -34,11 +33,7 @@ while [ $status -eq 0 ]; do
         $pp/autofs.sh
         ;;
     esac
-#    if [ $? -ne 0 ]; then
-#        lib.misc.DialogWrapper v s  --clear --msgbox "Выход с ошибкой" 0 0 
-#    fi
 done
-#rm -f $tmp
 
 
 

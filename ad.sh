@@ -197,23 +197,22 @@ action.ad.registration() {
 		fi
 	fi
 
-	if [[ $(id -u) -ne 0 ]]; then
-#		dialog --title '**ОШИБКА**' --msgbox "Для регистрации в Active Directory требуются права привилегированного пользователя" 0 0
-		echo -e "**ОШИБКА**: Для регистрации в Active Directory требуются права привилегированного пользователя\n"
-		return 1
-	fi
-
 	if [ -z "$DIALOG_NONE" ]; then 
 		which dialog
 		if [ $? -ne 0 ]; then
 			status=0
 			lib.misc.InstallPackages dialog || status=$?
 			if [ $status -ne 0 ]; then
-#				dialog --title '**ОШИБКА**' --msgbox "Не удалось поставить пакет dialog для продолжения работы." 0 0
 				echo "**ОШИБКА**: Не удалось поставить пакет dialog для продолжения работы."
 				return 255
 			fi
 		fi
+	fi
+
+	if [[ $(id -u) -ne 0 ]]; then
+#		dialog --title '**ОШИБКА**' --msgbox "Для регистрации в Active Directory требуются права привилегированного пользователя" 0 0
+		echo -e "**ОШИБКА**: Для регистрации в Active Directory требуются права привилегированного пользователя\n"
+		return 1
 	fi
 
 	echo 'Get required packages for installation' 
