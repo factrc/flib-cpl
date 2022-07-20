@@ -19,7 +19,7 @@ arr_menu=(
 
 status=0
 vals=''
-helpfile="$pp/help_cpl"
+helpfile="$pp/rc/help_cpl"
 
 while [ $status -eq 0 ]; do
     arr=("${arr_menu[@]}")
