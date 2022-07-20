@@ -13,11 +13,16 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>. 
 
-if [ -n "$(readlink -fq $0)" ]; then
- . $(dirname $(readlink -fq $0))/function
+pp=$(readlink -fq $0)
+if [ -n "$pp" ]; then
+ pp=$(dirname $pp)
 else
-. $(dirname $0)/function
+ pp=$(dirname $0)
 fi
+
+. $pp/function
+
+[ -z "$DIALOGRC" ] && DIALOGRC=$pp/rc/dialogrc
 
 
 action.dialog.ad.GetAdminAccount () { #ref_def_name ref_def_pass
@@ -174,7 +179,7 @@ action.dialog.ad.ExitInfo() {
 	local stat=0
 	[ -n "$DIALOG_NONE" ] && return 0	
 	lib.misc.DialogWrapper val stat --backtitle "$background" --msgbox "$text" 0 0
-	return 0
+	return 0          
 }
 ##############
 # 
@@ -210,8 +215,8 @@ action.ad.registration() {
 	fi
 
 	if [[ $(id -u) -ne 0 ]]; then
-#		dialog --title '**ОШИБКА**' --msgbox "Для регистрации в Active Directory требуются права привилегированного пользователя" 0 0
-		echo -e "**ОШИБКА**: Для регистрации в Active Directory требуются права привилегированного пользователя\n"
+		dialog --title '**ОШИБКА**' --msgbox "Для регистрации в Active Directory требуются права привилегированного пользователя" 0 0
+#		echo -e "\033[0;31m**ОШИБКА**: Для регистрации в Active Directory требуются права привилегированного пользователя\033[0m\n"
 		return 1
 	fi
 
@@ -272,7 +277,7 @@ action.ad.registration() {
 	lib.ad.GetFromDnsRecords
 	if [ -z "$master_dc" ]; then
 #		dialog --title '**ОШИБКА**' --msgbox "Проверьте правильность настройки DNS клиента(серверов) или правильность указанного домена [$domain] и повторите регистрацию." 0 0
-		echo "**ОШИБКА**: Проверьте правильность настройки DNS клиента(серверов) или правильность указанного домена [$domain] и повторите регистрацию."
+		echo "\033[0;31m**ОШИБКА**: Проверьте правильность настройки DNS клиента(серверов) или правильность указанного домена [$domain] и повторите регистрацию.\033[0m"
 		return 5
 	fi
 

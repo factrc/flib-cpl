@@ -13,13 +13,16 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>. 
 
-
-if [ -n "$(readlink -fq $0)" ]; then
- . $(dirname $(readlink -fq $0))/function
+pp=$(readlink -fq $0)
+if [ -n "$pp" ]; then
+ pp=$(dirname $pp)
 else
-. $(dirname $0)/function
+ pp=$(dirname $0)
 fi
 
+. $pp/function
+
+[ -z "$DIALOGRC" ] && DIALOGRC=$pp/rc/dialogrc
 
 background='Подключение ресурса с помощью pam_mount'
 
@@ -151,7 +154,15 @@ action.dialog.pammount.mount() {
     local point=''
     local ret=''
     local dialogopt="--ok-label Поиск --cancel-label Завершить --extra-button --extra-label Подключить"
-	
+
+
+	if [[ $(id -u) -ne 0 ]]; then
+		dialog --title '**ОШИБКА**' --msgbox "Для подключение ресурсов требуются права привилегированного пользователя" 0 0
+#		echo -e "\033[0;31m**ОШИБКА**: Для подключение ресурсов требуются права привилегированного пользователя\033[0m\n"
+		return 1
+	fi
+
+
     while [ $status -eq 0 ]; do
 		local form_arr=( 
 			"Имя пользователя: " 		2 1  "$username" 	2 	$offset 30 		255
@@ -190,9 +201,7 @@ action.dialog.pammount.mount() {
 			*) ;;
 		esac	
     done
-    echo status=$status,val=$val
 }
+
 action.dialog.pammount.InstallRequiredPackages $(lib.pammount.GetRequiredPackages) || return 0
-#echo "$(lib.pammount.GetRequiredPackages)"
-#lib.misc.InstallPackages $(lib.pammount.GetRequiredPackages)
 action.dialog.pammount.mount $@
