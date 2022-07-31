@@ -739,7 +739,7 @@ lib.ad.MakeKrb5Config() {
 [realms]
     $DOMAIN = {
 	master_kdc = $master_dc
-      $(for i in ${domain_dc[@]:1}; do echo -e "\tkdc = $i"; done)
+      $(for i in ${domain_dc[@]}; do echo -e "\tkdc = $i"; done)
     }
 EOFFILE
 	if [ -r "$krb5" ]; then
@@ -1279,26 +1279,22 @@ lib.autofs.Process() {
 }
 
 if [ -n "$(readlink -fq $0)" ]; then
-	_flib_path_=$(dirname $(readlink -fq $0))
+	_flib_path_=$(dirname -- $(readlink -fq $0))
 else
-	_flib_path_=$(dirname $0)
+	_flib_path_=$(dirname -- $0)
 fi
 
 if [ ! -r "$_flib_path_/config" ]; then
 	if [ -z "${BASH_SOURCE[1]}" ]; then
-		_flib_path_="$(dirname ${BASH_SOURCE[0]})"
+		_flib_path_="$(dirname -- ${BASH_SOURCE[0]})"
 	else
-		_flib_path_=$(dirname $0)
+		_flib_path_=$(dirname -- $0)
 		[ -r "$_flib_path_/config" ] || _flib_path_="$(pwd)"
 	fi
 fi	
-echo "use path: $_flib_path_"
-
 _flib_path_=${_flib_path_:-.}
-
 echo "Loading config"
 . "${_flib_path_}/config"
-
 #################################
 #  DETECT OS after load script
 #################################
