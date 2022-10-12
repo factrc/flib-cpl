@@ -644,7 +644,7 @@ lib.ad.MakeSmbConfig() {
     realm = $domain
     #printing = CUPS
 
-    client signing = yes
+    client signing = auto
 
     log file = $log_file
     log level = 1
