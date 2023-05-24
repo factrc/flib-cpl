@@ -586,7 +586,8 @@ lib.ad.MakeSssdConfig() {
     access_provider = ad
     id_provider = ad
     subdomains_provider = ad
-
+    
+    ad_update_samba_machine_account_password = true
     ad_hostname = ${machine_name:-$(cat /etc/hostname)}
     ad_server = $ad_server
     ad_domain = ${DOMAIN}
@@ -649,7 +650,8 @@ lib.ad.MakeSmbConfig() {
     log file = $log_file
     log level = 1
     max log size = 500
-
+    
+    machine password timeout = 0
     winbind enum users = yes
     winbind enum groups = yes
     winbind cache time = 600
