@@ -668,7 +668,7 @@ lib.ad.MakeSmbConfig() {
     template shell = /bin/bash
 
     idmap config * : backend = tdb
-    idmap config * : range = 10000-999999
+    idmap config * : range = 10000-99999
     idmap config $workgroup : backend = sss
     idmap config $workgroup : range = 200000-2147483647
 
